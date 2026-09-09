@@ -226,6 +226,23 @@ function num(v){
   return isNaN(n) ? 0 : n;
 }
 
+// Google Sheets sering otomatis mengubah teks "2026-09" jadi tanggal.
+// gviz mengirim tanggal sebagai string literal "Date(2026,8,1)" (bulan 0-indexed).
+// Fungsi ini menerima baik format itu maupun teks biasa "2026-09" / "2026-09-01".
+function parseBulanValue(raw){
+  if (raw === null || raw === undefined) return '';
+  const str = String(raw).trim();
+  const dateMatch = str.match(/^Date\((\d+),(\d+),(\d+)/);
+  if (dateMatch){
+    const y = dateMatch[1];
+    const m = String(parseInt(dateMatch[2], 10) + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  }
+  const isoMatch = str.match(/^(\d{4})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}`;
+  return str;
+}
+
 // Ambil tanggal (YYYYMMDD) yang tertanam di nomor RECEIPT, lalu ubah jadi "YYYY-MM"
 function monthKeyFromReceipt(receipt){
   if (!receipt) return null;
@@ -335,6 +352,10 @@ function renderTrendChart(rows){
 }
 
 async function init(){
+  let deptMonthly = {};
+  let targetByMonth = {};
+
+  // ===== Bagian 1: Roster, Target, data mentah -> Hero + daftar SMT =====
   try {
     const [roster, targetRows] = await Promise.all([
       fetchSheet(CONFIG.ROSTER_TAB),
@@ -345,14 +366,11 @@ async function init(){
       .filter(r => r['Nama'])
       .map(r => ({ name: r['Nama'], tab: r['Tab'] || r['Nama'] }));
 
-    // Ambil semua transaksi mentah tiap SMT sekaligus
     const rawPerSmt = await Promise.all(
       smtList.map(s => fetchSheet(s.tab).catch(() => []))
     );
 
-    // Kelompokkan omzet departemen (semua SMT) per bulan, dan omzet per SMT per bulan
-    const deptMonthly = {};        // { '2026-06': total }
-    const smtMonthly = smtList.map(() => ({})); // index sejajar dengan smtList
+    const smtMonthly = smtList.map(() => ({}));
 
     rawPerSmt.forEach((rows, idx) => {
       rows.forEach(row => {
@@ -365,10 +383,8 @@ async function init(){
       });
     });
 
-    // Susun tab Target -> { bulan, targetDept, jumlahSales }
-    const targetByMonth = {};
     targetRows.forEach(r => {
-      const bulan = String(r['Bulan'] || '').trim();
+      const bulan = parseBulanValue(r['Bulan']);
       if (!bulan) return;
       targetByMonth[bulan] = {
         targetDept: num(r['Target Departemen']),
@@ -390,7 +406,16 @@ async function init(){
     });
     renderSmtList(smtRows);
 
-    // Tren: satu baris per bulan yang ada di tab Target, urut kronologis
+    document.getElementById('lastUpdate').textContent =
+      'Data dimuat: ' + new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch (err) {
+    document.getElementById('smtList').innerHTML =
+      `<div class="state-msg error">Gagal memuat data. Pastikan Sheet ID benar, sheet sudah dipublikasikan ("Anyone with the link" — Viewer), dan tab Roster/Target sudah diisi. Detail: ${err.message}</div>`;
+    return; // hero & SMT gagal total -> jangan lanjut ke grafik dengan data kosong
+  }
+
+  // ===== Bagian 2: Grafik tren (terpisah, tidak menimpa bagian 1 kalau gagal) =====
+  try {
     const trendRows = Object.keys(targetByMonth)
       .sort()
       .map(bulan => ({
@@ -399,12 +424,9 @@ async function init(){
         actual: deptMonthly[bulan] || 0,
       }));
     renderTrendChart(trendRows);
-
-    document.getElementById('lastUpdate').textContent =
-      'Data dimuat: ' + new Date().toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' });
   } catch (err) {
-    document.getElementById('smtList').innerHTML =
-      `<div class="state-msg error">Gagal memuat data. Pastikan Sheet ID benar, sheet sudah dipublikasikan ("Anyone with the link" — Viewer), dan tab Roster/Target sudah diisi. Detail: ${err.message}</div>`;
+    document.querySelector('.chart-panel').innerHTML =
+      `<div class="state-msg error">Grafik tren gagal dimuat (biasanya karena CDN Chart.js diblokir jaringan). Detail: ${err.message}</div>`;
   }
 }
 
