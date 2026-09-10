@@ -55,12 +55,12 @@
   .hero-number.over{ color: var(--sage); }
   .hero-sub{ color: var(--muted); margin-top: 6px; font-size: 0.95rem; }
 
+  .progress-wrap{ position: relative; margin-top: 18px; }
   .progress-track{
     height: 8px;
     background: var(--panel);
     border: 1px solid var(--panel-border);
     border-radius: 5px;
-    margin-top: 18px;
     overflow: hidden;
   }
   .progress-fill{
@@ -71,9 +71,20 @@
   }
   .progress-fill.over{ background: linear-gradient(90deg, #5C7D60, var(--sage)); }
   .progress-fill.under{ background: linear-gradient(90deg, #8C4634, var(--clay)); }
+  .progress-marker{
+    position: absolute;
+    top: -4px; bottom: -4px;
+    width: 2px;
+    background: var(--text);
+    opacity: 0.55;
+    border-radius: 1px;
+    transform: translateX(-1px);
+  }
 
   .figures{ display:flex; justify-content:space-between; margin-top: 12px; font-size: 0.92rem; color: var(--muted); }
   .figures strong{ color: var(--text); font-weight: 500; }
+  .mtd-legend{ margin-top: 10px; font-size: 0.78rem; color: var(--muted); }
+  .mtd-legend .tick{ display:inline-block; width:2px; height:10px; background:var(--text); opacity:0.55; vertical-align:middle; margin-right:6px; border-radius:1px; }
 
   section.block{ margin-top: 44px; }
   .block-title{
@@ -85,32 +96,44 @@
   .block-sub{ color: var(--muted); font-size: 0.88rem; margin-bottom: 18px; }
 
   .smt-row{
-    display:grid;
-    grid-template-columns: 20px 84px 1fr 44px;
-    align-items:center;
-    gap: 14px;
-    padding: 11px 0;
+    padding: 13px 0;
     border-bottom: 1px solid var(--panel-border);
   }
   .smt-row:first-child{ border-top: 1px solid var(--panel-border); }
-  .smt-rank{ color: var(--muted); font-size: 0.78rem; }
+  .smt-row-top{
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 9px;
+  }
+  .smt-rank{ color: var(--muted); font-size: 0.78rem; flex-shrink:0; width: 16px; }
   .smt-name{
     font-weight: 500;
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
-  .smt-bar-wrap{ width: 100%; }
+  .smt-figures{ display:flex; align-items:baseline; gap: 10px; flex-shrink:0; }
+  .smt-value{ color: var(--muted); font-size: 0.8rem; }
+  .smt-pct{ font-size: 0.9rem; font-weight: 500; min-width: 38px; text-align:right; }
+  .smt-pct.over{ color: var(--sage); }
+  .smt-pct.under{ color: var(--clay); }
+
+  .smt-bar-wrap{ position: relative; margin-left: 26px; }
   .smt-bar-track{ height: 6px; background: var(--panel); border-radius: 4px; overflow:hidden; }
   .smt-bar-fill{ height:100%; width:0%; border-radius:4px; transition: width 1s ease; background: var(--gold); }
   .smt-bar-fill.over{ background: var(--sage); }
   .smt-bar-fill.under{ background: var(--clay); }
-  .smt-pct{ text-align:right; font-size: 0.9rem; }
-  .smt-pct.over{ color: var(--sage); }
-  .smt-pct.under{ color: var(--clay); }
-
-  @media (min-width: 640px){
-    .smt-row{ grid-template-columns: 22px 110px 1fr 48px; }
+  .smt-bar-marker{
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 2px;
+    background: var(--text);
+    opacity: 0.5;
+    border-radius: 1px;
+    transform: translateX(-1px);
   }
 
   .chart-panel{
@@ -143,11 +166,15 @@
   <div class="hero">
     <div class="hero-sub">Pencapaian bulan ini</div>
     <p class="hero-number" id="heroPct">–</p>
-    <div class="progress-track"><div class="progress-fill" id="heroBar"></div></div>
+    <div class="progress-wrap">
+      <div class="progress-track"><div class="progress-fill" id="heroBar"></div></div>
+      <div class="progress-marker" id="heroMarker"></div>
+    </div>
     <div class="figures">
       <span>Pencapaian: <strong id="heroActual">–</strong></span>
       <span>Target: <strong id="heroTarget">–</strong></span>
     </div>
+    <div class="mtd-legend"><span class="tick"></span>Standar pencapaian (MTD) hingga hari ini</div>
   </div>
 
   <section class="block">
@@ -224,6 +251,15 @@ function currentMonthKey(){
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
+// Fraksi hari yang sudah lewat di bulan berjalan (0-1). Dipakai untuk
+// menempatkan garis "standar MTD" di tiap progress bar.
+function mtdStandardFraction(){
+  const d = new Date();
+  const day = d.getDate();
+  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return Math.min(day / daysInMonth, 1);
+}
+
 function formatMonthLabel(monthKey){
   const [y, m] = String(monthKey).split('-');
   const idx = parseInt(m, 10) - 1;
@@ -293,6 +329,8 @@ function renderHero(target, actual){
   document.getElementById('heroTarget').textContent = fmt(target);
   const bar = document.getElementById('heroBar');
   bar.className = 'progress-fill ' + cls;
+  const markerPct = Math.min(mtdStandardFraction() * 100, 100);
+  document.getElementById('heroMarker').style.left = markerPct + '%';
   requestAnimationFrame(() => { bar.style.width = Math.min(pct, 100) + '%'; });
 }
 
@@ -303,14 +341,23 @@ function renderSmtList(rows){
     return;
   }
   const sorted = [...rows].sort((a, b) => b.pct - a.pct);
+  const markerPct = Math.min(mtdStandardFraction() * 100, 100);
 
   container.innerHTML = sorted.map((r, i) => {
     const cls = pctClass(r.pct);
     return `<div class="smt-row">
-      <div class="smt-rank">${i + 1}</div>
-      <div class="smt-name">${r.name}</div>
-      <div class="smt-bar-wrap"><div class="smt-bar-track"><div class="smt-bar-fill ${cls}" style="width:${Math.min(r.pct,100)}%"></div></div></div>
-      <div class="smt-pct ${cls}">${r.pct.toFixed(0)}%</div>
+      <div class="smt-row-top">
+        <div class="smt-rank">${i + 1}</div>
+        <div class="smt-name">${r.name}</div>
+        <div class="smt-figures">
+          <span class="smt-value">${fmt(r.actual)}</span>
+          <span class="smt-pct ${cls}">${r.pct.toFixed(0)}%</span>
+        </div>
+      </div>
+      <div class="smt-bar-wrap">
+        <div class="smt-bar-track"><div class="smt-bar-fill ${cls}" style="width:${Math.min(r.pct,100)}%"></div></div>
+        <div class="smt-bar-marker" style="left:${markerPct}%"></div>
+      </div>
     </div>`;
   }).join('');
 }
